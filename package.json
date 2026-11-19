@@ -1,5 +1,5 @@
 {
-  "name": "@pnzj/nowpayments",
+  "name": "@pnzj-dev/nowpayments",
   "version": "0.1.0",
   "description": "Runtime-agnostic TypeScript SDK for the NOWPayments API — payments, invoices, payouts, mass payouts, custody subscriptions, IPN verification. Works in Cloudflare Workers, Bun, Node and browsers.",
   "type": "module",

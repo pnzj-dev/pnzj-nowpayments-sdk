@@ -36,7 +36,7 @@ import { generateTotpCode } from "./totp";
 
 const DEFAULT_BASE_URL = "https://api.nowpayments.io";
 const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_USER_AGENT = "@pnzj/nowpayments/0.1.0";
+const DEFAULT_USER_AGENT = "@pnzj-dev/nowpayments/0.1.0";
 
 export interface AuthenticateInput {
   email: string;

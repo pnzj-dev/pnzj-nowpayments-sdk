@@ -1,4 +1,4 @@
-# @pnzj/nowpayments
+# @pnzj-dev/nowpayments
 
 Runtime-agnostic TypeScript SDK for the [NOWPayments](https://nowpayments.io) API —
 payments, invoices, payouts, mass payouts, custodial subscriptions, and IPN
@@ -13,14 +13,14 @@ verification. Zero runtime dependencies; built on Web-platform APIs only
 ## Install
 
 ```sh
-npm install @pnzj/nowpayments
-# or: bun add @pnzj/nowpayments
+npm install @pnzj-dev/nowpayments
+# or: bun add @pnzj-dev/nowpayments
 ```
 
 ## Quick start — one-off payment (Cloudflare Workers)
 
 ```ts
-import { NowPaymentsClient } from "@pnzj/nowpayments";
+import { NowPaymentsClient } from "@pnzj-dev/nowpayments";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
