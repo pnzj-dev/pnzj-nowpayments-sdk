@@ -144,7 +144,11 @@ export class NowPaymentsClient {
 
   /** Paginated payments list (Bearer-protected). */
   listPayments(query: PaymentsListQuery = {}): Promise<PaymentsList> {
-    return this.http.request({ path: "/v1/payment/", query: { ...query }, bearer: true });
+    return this.http.request({
+      path: "/v1/payment/",
+      query: { order_by: "desc", ...query },
+      bearer: true,
+    });
   }
 
   // ------------------------------------------------------------ invoices
@@ -156,26 +160,27 @@ export class NowPaymentsClient {
 
   // ------------------------------------------------------------ payouts
 
-  /** Custody balance. */
+  /** Custody balance (Bearer-protected). */
   getBalance(): Promise<unknown> {
-    return this.http.request({ path: "/v1/balance" });
+    return this.http.request({ path: "/v1/balance", bearer: true });
   }
 
-  /** Minimum payout amount for a currency. */
+  /** Minimum payout amount for a currency (Bearer-protected). */
   getMinimumPayoutAmount(currency: string): Promise<unknown> {
     return this.http.request({
       path: `/v1/payout-withdrawal/min-amount/${encodeURIComponent(currency)}`,
+      bearer: true,
     });
   }
 
-  /** Network fee estimate for a payout. */
+  /** Network fee estimate for a payout (API key suffices). */
   getPayoutFee(query: PayoutFeeQuery): Promise<unknown> {
     return this.http.request({ path: "/v1/payout/fee", query: { ...query } });
   }
 
-  /** Validate a payout destination address. */
+  /** Validate a payout destination address (Bearer-protected). */
   validatePayoutAddress(body: { address: string; currency: string }): Promise<unknown> {
-    return this.http.request({ method: "POST", path: "/v1/payout/validate-address", body });
+    return this.http.request({ method: "POST", path: "/v1/payout/validate-address", body, bearer: true });
   }
 
   /** Create a payout batch (POST /v1/payout, Bearer-protected). */
@@ -203,7 +208,11 @@ export class NowPaymentsClient {
 
   /** Paginated payouts list (Bearer-protected). */
   listPayouts(query: PayoutsListQuery = {}): Promise<PayoutsList> {
-    return this.http.request({ path: "/v1/payout", query: { ...query }, bearer: true });
+    return this.http.request({
+      path: "/v1/payout",
+      query: { order_by: "desc", ...query },
+      bearer: true,
+    });
   }
 
   // ------------------------------------------------------------ custody

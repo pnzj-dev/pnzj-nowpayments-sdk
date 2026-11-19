@@ -109,10 +109,10 @@ export interface PaymentsList {
 export interface PaymentsListQuery {
   limit?: number;
   page?: number;
-  sortBy?: "created_at" | "updated_at" | "price_amount" | string;
-  orderBy?: "asc" | "desc";
-  dateFrom?: string;
-  dateTo?: string;
+  sort_by?: "created_at" | "updated_at" | "price_amount" | string;
+  order_by?: "asc" | "desc";
+  date_from?: string;
+  date_to?: string;
   [key: string]: unknown;
 }
 
@@ -232,10 +232,10 @@ export interface PayoutsList {
 export interface PayoutsListQuery {
   limit?: number;
   page?: number;
-  sortBy?: string;
-  orderBy?: "asc" | "desc";
-  dateFrom?: string;
-  dateTo?: string;
+  sort_by?: string;
+  order_by?: "asc" | "desc";
+  date_from?: string;
+  date_to?: string;
   [key: string]: unknown;
 }
 
