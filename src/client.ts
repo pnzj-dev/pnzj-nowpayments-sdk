@@ -142,11 +142,11 @@ export class NowPaymentsClient {
     return this.http.request({ path: `/v1/payment/${encodeURIComponent(paymentId)}` });
   }
 
-  /** Paginated payments list (Bearer-protected). */
+  /** Paginated payments list (Bearer-protected). Query params are passed through. */
   listPayments(query: PaymentsListQuery = {}): Promise<PaymentsList> {
     return this.http.request({
       path: "/v1/payment/",
-      query: { order_by: "desc", ...query },
+      query: { ...query },
       bearer: true,
     });
   }
@@ -206,11 +206,12 @@ export class NowPaymentsClient {
     });
   }
 
-  /** Paginated payouts list (Bearer-protected). */
+  /** Paginated payouts list (Bearer-protected). Query params are passed through
+   * (e.g. order_by: "dateCreated" — a sort field, not a direction). */
   listPayouts(query: PayoutsListQuery = {}): Promise<PayoutsList> {
     return this.http.request({
       path: "/v1/payout",
-      query: { order_by: "desc", ...query },
+      query: { ...query },
       bearer: true,
     });
   }

@@ -109,8 +109,6 @@ export interface PaymentsList {
 export interface PaymentsListQuery {
   limit?: number;
   page?: number;
-  sort_by?: "created_at" | "updated_at" | "price_amount" | string;
-  order_by?: "asc" | "desc";
   date_from?: string;
   date_to?: string;
   [key: string]: unknown;
@@ -232,8 +230,8 @@ export interface PayoutsList {
 export interface PayoutsListQuery {
   limit?: number;
   page?: number;
-  sort_by?: string;
-  order_by?: "asc" | "desc";
+  /** Sort field, e.g. "id" | "batchId" | "dateCreated". Not a direction. */
+  order_by?: string;
   date_from?: string;
   date_to?: string;
   [key: string]: unknown;
