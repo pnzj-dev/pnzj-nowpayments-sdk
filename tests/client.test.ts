@@ -180,16 +180,16 @@ describe("NowPaymentsClient", () => {
     expect(calls[1]!.pathname).toBe("/v1/payout/3/cancel-batch");
   });
 
-  test("fiat payout catalogs are API-key only", async () => {
+  test("fiat payout catalogs require Bearer", async () => {
     const calls: Array<{ url: URL; headers: Record<string, string> }> = [];
     const fetchImpl = mockFetch((url, init) => {
       calls.push({ url, headers: (init.headers ?? {}) as Record<string, string> });
       return new Response(JSON.stringify([]), { status: 200 });
     });
-    const client = new NowPaymentsClient({ apiKey: "k", fetch: fetchImpl });
+    const client = new NowPaymentsClient({ apiKey: "k", jwtToken: "jwt", fetch: fetchImpl });
     await client.getFiatPayoutProviders();
     expect(calls[0]!.url.pathname).toBe("/v1/fiat-payouts/providers");
-    expect(calls[0]!.headers.authorization).toBeUndefined();
+    expect(calls[0]!.headers.authorization).toBe("Bearer jwt");
   });
 
   test("JWT auto-refresh when within skew of expiry (provider)", async () => {

@@ -453,24 +453,32 @@ export class NowPaymentsClient {
 
   // ---------------------------------------------------------------- fiat payouts
 
-  /** Available fiat-payout providers (catalog, API key). */
+  /** Available fiat-payout providers (Bearer-protected). */
   getFiatPayoutProviders(): Promise<unknown> {
-    return this.http.request({ path: "/v1/fiat-payouts/providers" });
+    return this.http.request({ path: "/v1/fiat-payouts/providers", bearer: true });
   }
 
-  /** Available fiat currencies (catalog, API key). */
+  /** Available fiat currencies (Bearer-protected). */
   getFiatCurrencies(): Promise<unknown> {
-    return this.http.request({ path: "/v1/fiat-payouts/fiat-currencies" });
+    return this.http.request({ path: "/v1/fiat-payouts/fiat-currencies", bearer: true });
   }
 
-  /** Crypto currencies available for fiat payouts. */
+  /** Crypto currencies available for fiat payouts (Bearer-protected). */
   getFiatCryptoCurrencies(query: Record<string, unknown> = {}): Promise<unknown> {
-    return this.http.request({ path: "/v1/fiat-payouts/crypto-currencies", query: { ...query } });
+    return this.http.request({
+      path: "/v1/fiat-payouts/crypto-currencies",
+      query: { ...query },
+      bearer: true,
+    });
   }
 
-  /** Payment methods for fiat payouts. */
+  /** Payment methods for fiat payouts (Bearer-protected). */
   getFiatPaymentMethods(query: Record<string, unknown> = {}): Promise<unknown> {
-    return this.http.request({ path: "/v1/fiat-payouts/payment-methods", query: { ...query } });
+    return this.http.request({
+      path: "/v1/fiat-payouts/payment-methods",
+      query: { ...query },
+      bearer: true,
+    });
   }
 
   /** Create a fiat-payout account (Bearer-protected). */

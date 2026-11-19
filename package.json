@@ -1,6 +1,6 @@
 {
   "name": "@pnzj-dev/nowpayments",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Runtime-agnostic TypeScript SDK for the NOWPayments API — payments, invoices, payouts, mass payouts, custody subscriptions, IPN verification. Works in Cloudflare Workers, Bun, Node and browsers.",
   "homepage": "https://github.com/pnzj-dev/pnzj-nowpayments-sdk#readme",
   "repository": {
