@@ -102,7 +102,9 @@ export class NowPaymentsClient {
 
   /** Full currency metadata list. */
   getFullCurrencies(): Promise<unknown> {
-    return this.http.request({ path: "/v1/currencies", query: { full: 1 } });
+    // The API rejects the historical `full=1` query; the plain endpoint already
+    // returns the complete list with metadata.
+    return this.http.request({ path: "/v1/currencies" });
   }
 
   /** Minimum payment amount for a currency pair. */
