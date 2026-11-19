@@ -1,0 +1,47 @@
+{
+  "name": "@pnzj/nowpayments",
+  "version": "0.1.0",
+  "description": "Runtime-agnostic TypeScript SDK for the NOWPayments API — payments, invoices, payouts, mass payouts, custody subscriptions, IPN verification. Works in Cloudflare Workers, Bun, Node and browsers.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prepack": "bun run build && bun test"
+  },
+  "keywords": [
+    "nowpayments",
+    "payments",
+    "payouts",
+    "mass-payouts",
+    "subscriptions",
+    "custody",
+    "crypto",
+    "cloudflare-workers",
+    "workers",
+    "bun",
+    "sdk"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.6",
+    "typescript": "^5.6.3"
+  }
+}
