@@ -31,6 +31,15 @@ export interface NowPaymentsClientOptions {
   ipnSecret?: string;
   /** Dashboard JWT for Bearer-protected endpoints (payouts). */
   jwtToken?: string | (() => string | null);
+  /**
+   * Dashboard credentials for automatic JWT acquisition/refresh. SERVER-SIDE
+   * ONLY — never put these in a Cloudflare Worker or any client-facing app;
+   * they authorize payout/funds operations.
+   */
+  email?: string;
+  password?: string;
+  /** Refresh the JWT this many ms before its exp (default 30_000). */
+  jwtRefreshSkewMs?: number;
   /** API base URL override (defaults to https://api.nowpayments.io). */
   baseUrl?: string;
   /** Per-request timeout in milliseconds (default 30000). */
@@ -206,7 +215,6 @@ export interface PayoutInput {
   description?: string;
   network_fee_paid_by?: "sender" | "recipient" | "receiver";
 }
-
 export interface Payout {
   id: number | null;
   batch_withdrawal_id: number | null;
@@ -231,8 +239,12 @@ export interface PayoutsList {
 export interface PayoutsListQuery {
   limit?: number;
   page?: number;
+  batch_id?: string | number;
+  status?: string;
   /** Sort field, e.g. "id" | "batchId" | "dateCreated". Not a direction. */
   order_by?: string;
+  /** Sort direction when order_by is set. */
+  order?: "asc" | "desc";
   date_from?: string;
   date_to?: string;
   [key: string]: unknown;
@@ -278,6 +290,53 @@ export interface Subscription {
 export interface SubPartnerAccountInput {
   /** Partner-assigned id for the customer. */
   id: string;
+  [key: string]: unknown;
+}
+
+// ---------------------------------------------------------------- subscriptions (custody)
+
+export interface SubscriptionsListQuery {
+  status?: string;
+  subscription_plan_id?: string | number;
+  is_active?: boolean;
+  limit?: number;
+  offset?: number;
+  [key: string]: unknown;
+}
+
+export interface SubscriptionPlanInput {
+  plan_name?: string;
+  price_amount?: number;
+  price_currency?: string;
+  pay_currency?: string;
+  period?: string;
+  [key: string]: unknown;
+}
+
+// ---------------------------------------------------------------- conversions
+
+export interface ConversionInput {
+  from_currency: string;
+  to_currency: string;
+  amount: number;
+  [key: string]: unknown;
+}
+
+// ---------------------------------------------------------------- fiat payouts
+
+export interface FiatPayoutAccountInput {
+  provider: string;
+  fiat_currency: string;
+  [key: string]: unknown;
+}
+
+export interface FiatPayoutInput {
+  provider?: string;
+  request_id?: string;
+  account_id?: string;
+  amount: number;
+  fiat_currency: string;
+  crypto_currency?: string;
   [key: string]: unknown;
 }
 

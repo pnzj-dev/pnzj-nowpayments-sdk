@@ -94,6 +94,159 @@ describe("NowPaymentsClient", () => {
     await expect(client.getStatus()).resolves.toEqual({ status: "ok" });
   });
 
+  test("getFullCurrencies hits /v1/full-currencies (not a query param)", async () => {
+    const calls: Array<URL> = [];
+    const fetchImpl = mockFetch((url) => {
+      calls.push(url);
+      return new Response(JSON.stringify({ currencies: [] }), { status: 200 });
+    });
+    const client = new NowPaymentsClient({ apiKey: "k", fetch: fetchImpl });
+    await client.getFullCurrencies();
+    expect(calls[0]!.pathname).toBe("/v1/full-currencies");
+    expect(calls[0]!.search).toBe("");
+  });
+
+  test("getFixedRateCurrencies sends fixed_rate=true", async () => {
+    const calls: Array<URL> = [];
+    const fetchImpl = mockFetch((url) => {
+      calls.push(url);
+      return new Response(JSON.stringify({ currencies: [] }), { status: 200 });
+    });
+    const client = new NowPaymentsClient({ apiKey: "k", fetch: fetchImpl });
+    await client.getFixedRateCurrencies();
+    expect(calls[0]!.pathname).toBe("/v1/currencies");
+    expect(calls[0]!.searchParams.get("fixed_rate")).toBe("true");
+  });
+
+  test("getMerchantCoins hits /v1/merchant/coins with x-api-key", async () => {
+    const calls: Array<{ url: URL; headers: Record<string, string> }> = [];
+    const fetchImpl = mockFetch((url, init) => {
+      calls.push({ url, headers: (init.headers ?? {}) as Record<string, string> });
+      return new Response(JSON.stringify(["btc"]), { status: 200 });
+    });
+    const client = new NowPaymentsClient({ apiKey: "k", fetch: fetchImpl });
+    await client.getMerchantCoins();
+    expect(calls[0]!.url.pathname).toBe("/v1/merchant/coins");
+    expect(calls[0]!.headers["x-api-key"]).toBe("k");
+  });
+
+  test("cancelSubscription uses DELETE and Bearer", async () => {
+    const calls: Array<{ url: URL; init: RequestInit }> = [];
+    const fetchImpl = mockFetch((url, init) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const client = new NowPaymentsClient({ apiKey: "k", jwtToken: "jwt", fetch: fetchImpl });
+    await client.cancelSubscription(42);
+    expect(calls[0]!.url.pathname).toBe("/v1/subscriptions/42");
+    expect(calls[0]!.init.method).toBe("DELETE");
+  });
+
+  test("updateSubscriptionPlan uses PATCH", async () => {
+    const calls: Array<RequestInit> = [];
+    const fetchImpl = mockFetch((_url, init) => {
+      calls.push(init);
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const client = new NowPaymentsClient({ apiKey: "k", jwtToken: "jwt", fetch: fetchImpl });
+    await client.updateSubscriptionPlan(7, { plan_name: "x" });
+    expect(calls[0]!.method).toBe("PATCH");
+  });
+
+  test("conversion endpoints use Bearer", async () => {
+    const calls: Array<{ url: URL; headers: Record<string, string> }> = [];
+    const fetchImpl = mockFetch((url, init) => {
+      calls.push({ url, headers: (init.headers ?? {}) as Record<string, string> });
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const client = new NowPaymentsClient({ apiKey: "k", jwtToken: "jwt", fetch: fetchImpl });
+    await client.createConversion({ from_currency: "btc", to_currency: "usdttrc20", amount: 0.1 });
+    expect(calls[0]!.url.pathname).toBe("/v1/conversion");
+    expect(calls[0]!.headers.authorization).toBe("Bearer jwt");
+    await client.getConversionStatus(5);
+    expect(calls[1]!.url.pathname).toBe("/v1/conversion/5");
+  });
+
+  test("payout cancel endpoints hit the right paths", async () => {
+    const calls: Array<URL> = [];
+    const fetchImpl = mockFetch((url) => {
+      calls.push(url);
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const client = new NowPaymentsClient({ apiKey: "k", jwtToken: "jwt", fetch: fetchImpl });
+    await client.cancelPayout(9);
+    await client.cancelPayoutBatch(3);
+    expect(calls[0]!.pathname).toBe("/v1/payout/9/cancel");
+    expect(calls[1]!.pathname).toBe("/v1/payout/3/cancel-batch");
+  });
+
+  test("fiat payout catalogs are API-key only", async () => {
+    const calls: Array<{ url: URL; headers: Record<string, string> }> = [];
+    const fetchImpl = mockFetch((url, init) => {
+      calls.push({ url, headers: (init.headers ?? {}) as Record<string, string> });
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+    const client = new NowPaymentsClient({ apiKey: "k", fetch: fetchImpl });
+    await client.getFiatPayoutProviders();
+    expect(calls[0]!.url.pathname).toBe("/v1/fiat-payouts/providers");
+    expect(calls[0]!.headers.authorization).toBeUndefined();
+  });
+
+  test("JWT auto-refresh when within skew of expiry (provider)", async () => {
+    const now = 1_700_000_000_000;
+    const nearExpiry = Math.floor((now + 10_000) / 1000); // 10s left, skew is 30s
+    const freshExp = Math.floor((now + 3_600_000) / 1000);
+    const fakeJwt = (exp: number) =>
+      `${btoa(JSON.stringify({ alg: "HS256" })).replace(/=/g, "")}.${btoa(JSON.stringify({ exp })).replace(/=/g, "")}.sig`;
+
+    let providerCalls = 0;
+    const jwtProvider = () => {
+      providerCalls += 1;
+      return providerCalls === 1 ? fakeJwt(nearExpiry) : fakeJwt(freshExp);
+    };
+
+    const authHeaders: Array<string | undefined> = [];
+    const fetchImpl = mockFetch((_url, init) => {
+      authHeaders.push(((init.headers ?? {}) as Record<string, string>).authorization);
+      return new Response(JSON.stringify({ data: [], total: 0 }), { status: 200 });
+    });
+
+    const client = new NowPaymentsClient({
+      apiKey: "k",
+      jwtToken: jwtProvider,
+      jwtRefreshSkewMs: 30_000,
+      fetch: fetchImpl,
+    });
+    await client.listPayments();
+
+    // near-expiry token -> provider consulted again for a fresh one
+    expect(providerCalls).toBe(2);
+    expect(authHeaders[0]).toBe(`Bearer ${fakeJwt(freshExp)}`);
+  });
+
+  test("JWT refresh is deduped across concurrent bearer calls", async () => {
+    let authCalls = 0;
+    const fetchImpl = mockFetch((url, init) => {
+      if (url.pathname === "/v1/auth") {
+        authCalls += 1;
+        return new Response(JSON.stringify({ token: "jwt" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ data: [], total: 0 }), { status: 200 });
+    });
+    const client = new NowPaymentsClient({
+      apiKey: "k",
+      email: "a@b.c",
+      password: "pw",
+      fetch: fetchImpl,
+    });
+    await Promise.all([client.listPayments(), client.listPayments()]);
+    // both calls needed a JWT; only one /v1/auth request should have happened
+    expect(authCalls).toBe(1);
+  });
+
   test("authenticate stores the returned JWT", async () => {
     const fetchImpl = mockFetch(() =>
       new Response(JSON.stringify({ token: "jwt-new" }), {

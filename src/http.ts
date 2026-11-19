@@ -1,7 +1,7 @@
 import { NowPaymentsError } from "./errors";
 
 export interface HttpRequestOptions {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   path: string;
   query?: Record<string, unknown>;
   body?: unknown;

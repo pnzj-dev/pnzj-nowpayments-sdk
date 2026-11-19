@@ -4,9 +4,13 @@
 
 import { NowPaymentsError } from "./errors";
 import { HttpClient } from "./http";
+import { getJwtExpiresAtMs } from "./jwt";
 import type {
+  ConversionInput,
   Estimate,
   EstimateQuery,
+  FiatPayoutAccountInput,
+  FiatPayoutInput,
   Invoice,
   InvoiceInput,
   InvoicePaymentInput,
@@ -25,6 +29,8 @@ import type {
   SubPartnerAccountInput,
   Subscription,
   SubscriptionInput,
+  SubscriptionPlanInput,
+  SubscriptionsListQuery,
   WebhookEvent,
 } from "./types";
 import {
@@ -36,7 +42,8 @@ import { generateTotpCode } from "./totp";
 
 const DEFAULT_BASE_URL = "https://api.nowpayments.io";
 const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_USER_AGENT = "@pnzj-dev/nowpayments/0.1.0";
+const DEFAULT_USER_AGENT = "@pnzj-dev/nowpayments/0.1.5";
+const DEFAULT_JWT_REFRESH_SKEW_MS = 30_000;
 
 export interface AuthenticateInput {
   email: string;
@@ -50,8 +57,11 @@ export class NowPaymentsClient {
   readonly generateTotpCode = generateTotpCode;
 
   private readonly http: HttpClient;
+  private readonly jwtRefreshSkewMs: number;
   private jwtToken: string | null = null;
   private jwtProvider: (() => string | null) | undefined;
+  private credentials: { email: string; password: string } | null = null;
+  private refreshInFlight: Promise<string | null> | null = null;
 
   constructor(options: NowPaymentsClientOptions = {}) {
     if (typeof options.jwtToken === "function") {
@@ -59,6 +69,11 @@ export class NowPaymentsClient {
     } else if (options.jwtToken) {
       this.jwtToken = options.jwtToken;
     }
+    if (options.email && options.password) {
+      this.credentials = { email: options.email, password: options.password };
+    }
+
+    this.jwtRefreshSkewMs = options.jwtRefreshSkewMs ?? DEFAULT_JWT_REFRESH_SKEW_MS;
 
     this.http = new HttpClient({
       apiKey: options.apiKey,
@@ -66,7 +81,7 @@ export class NowPaymentsClient {
       timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       fetchImpl: options.fetch ?? globalThis.fetch,
       userAgent: options.userAgent ?? DEFAULT_USER_AGENT,
-      getJwtToken: () => this.jwtProvider?.() ?? this.jwtToken,
+      getJwtToken: () => this.ensureJwt(),
     });
   }
 
@@ -76,8 +91,17 @@ export class NowPaymentsClient {
     return this;
   }
 
+  /** True when the current JWT is expired (or expires within the refresh skew). */
+  isJwtTokenExpired(nowMs: number = Date.now()): boolean {
+    const token = this.jwtProvider ? this.jwtProvider() : this.jwtToken;
+    const expiresAt = getJwtExpiresAtMs(token);
+    if (expiresAt === null) return false;
+    return expiresAt <= nowMs + this.jwtRefreshSkewMs;
+  }
+
   /** Exchange dashboard email/password for a JWT (POST /v1/auth). */
   async authenticate(credentials: AuthenticateInput): Promise<string | null> {
+    this.credentials = credentials;
     const body = await this.http.request<{ token?: string }>({
       method: "POST",
       path: "/v1/auth",
@@ -88,6 +112,45 @@ export class NowPaymentsClient {
     return body.token ?? null;
   }
 
+  /** Force a fresh JWT using the stored credentials (or the provider token). */
+  async refreshJwtToken(): Promise<string | null> {
+    if (this.refreshInFlight) return this.refreshInFlight;
+    if (this.credentials) {
+      this.refreshInFlight = this.authenticate(this.credentials).finally(() => {
+        this.refreshInFlight = null;
+      });
+      return this.refreshInFlight;
+    }
+    if (this.jwtProvider) {
+      const token = this.jwtProvider();
+      if (token) this.jwtToken = token;
+      return this.jwtToken;
+    }
+    return this.jwtToken;
+  }
+
+  /**
+   * Return a usable JWT for Bearer endpoints: the current token, refreshed
+   * first when it is expired or within the refresh skew of expiring.
+   * Returns null when no credentials are configured.
+   */
+  async ensureJwt(): Promise<string | null> {
+    if (this.jwtProvider) {
+      const token = this.jwtProvider();
+      const expiresAt = getJwtExpiresAtMs(token);
+      if (token && (expiresAt === null || expiresAt > Date.now() + this.jwtRefreshSkewMs)) {
+        return token;
+      }
+      return this.refreshJwtToken();
+    }
+    if (!this.jwtToken) {
+      if (this.credentials) return this.refreshJwtToken();
+      return null;
+    }
+    if (this.isJwtTokenExpired()) return this.refreshJwtToken();
+    return this.jwtToken;
+  }
+
   // ------------------------------------------------------------ core reads
 
   /** Service status (no auth). */
@@ -95,16 +158,34 @@ export class NowPaymentsClient {
     return this.http.request({ path: "/v1/status", apiKey: false });
   }
 
-  /** Supported currencies. Pass { full: 1 } for extended metadata. */
+  /** Supported currencies. */
   getCurrencies(query: Record<string, unknown> = {}): Promise<unknown> {
     return this.http.request({ path: "/v1/currencies", query });
   }
 
-  /** Full currency metadata list. */
+  /** Full currency metadata list (GET /v1/full-currencies). */
   getFullCurrencies(): Promise<unknown> {
-    // The API rejects the historical `full=1` query; the plain endpoint already
-    // returns the complete list with metadata.
-    return this.http.request({ path: "/v1/currencies" });
+    return this.http.request({ path: "/v1/full-currencies" });
+  }
+
+  /** Enabled/available currencies (alias of getCurrencies). */
+  getAvailableCurrencies(query: Record<string, unknown> = {}): Promise<unknown> {
+    return this.getCurrencies(query);
+  }
+
+  /** Currencies available with fixed-rate pricing (GET /v1/currencies?fixed_rate=true). */
+  getFixedRateCurrencies(): Promise<unknown> {
+    return this.http.request({ path: "/v1/currencies", query: { fixed_rate: true } });
+  }
+
+  /** Merchant-checked coins (GET /v1/merchant/coins). */
+  getMerchantCoins(): Promise<unknown> {
+    return this.http.request({ path: "/v1/merchant/coins" });
+  }
+
+  /** Alias of getMerchantCoins. */
+  getMerchantCurrencies(): Promise<unknown> {
+    return this.getMerchantCoins();
   }
 
   /** Minimum payment amount for a currency pair. */
@@ -207,11 +288,29 @@ export class NowPaymentsClient {
   }
 
   /** Paginated payouts list (Bearer-protected). Query params are passed through
-   * (e.g. order_by: "dateCreated" — a sort field, not a direction). */
+   * (e.g. order_by: "dateCreated", order: "desc"). */
   listPayouts(query: PayoutsListQuery = {}): Promise<PayoutsList> {
     return this.http.request({
       path: "/v1/payout",
       query: { ...query },
+      bearer: true,
+    });
+  }
+
+  /** Cancel a scheduled/recurring payout (POST /v1/payout/:payout_id/cancel). */
+  cancelPayout(payoutId: string | number): Promise<unknown> {
+    return this.http.request({
+      method: "POST",
+      path: `/v1/payout/${encodeURIComponent(payoutId)}/cancel`,
+      bearer: true,
+    });
+  }
+
+  /** Cancel a scheduled/recurring payout batch (POST /v1/payout/:batch_id/cancel-batch). */
+  cancelPayoutBatch(batchId: string | number): Promise<unknown> {
+    return this.http.request({
+      method: "POST",
+      path: `/v1/payout/${encodeURIComponent(batchId)}/cancel-batch`,
       bearer: true,
     });
   }
@@ -228,6 +327,54 @@ export class NowPaymentsClient {
     return this.http.request({
       path: `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
     });
+  }
+
+  /** Paginated custodial subscriptions (GET /v1/subscriptions). */
+  listSubscriptions(query: SubscriptionsListQuery = {}): Promise<unknown> {
+    return this.http.request({ path: "/v1/subscriptions", query: { ...query } });
+  }
+
+  /** Delete/cancel a recurring payment (DELETE /v1/subscriptions/:sub_id). */
+  cancelSubscription(subscriptionId: string | number): Promise<unknown> {
+    return this.http.request({
+      method: "DELETE",
+      path: `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    });
+  }
+
+  // ------------------------------------------------ subscription plans
+
+  /** Create a subscription plan (POST /v1/subscriptions/plans). */
+  createSubscriptionPlan(input: SubscriptionPlanInput): Promise<unknown> {
+    return this.http.request({
+      method: "POST",
+      path: "/v1/subscriptions/plans",
+      body: input,
+      bearer: true,
+    });
+  }
+
+  /** Update a subscription plan (PATCH /v1/subscriptions/plans/:plan_id). */
+  updateSubscriptionPlan(planId: string | number, input: SubscriptionPlanInput): Promise<unknown> {
+    return this.http.request({
+      method: "PATCH",
+      path: `/v1/subscriptions/plans/${encodeURIComponent(planId)}`,
+      body: input,
+      bearer: true,
+    });
+  }
+
+  /** Get one subscription plan. */
+  getSubscriptionPlan(planId: string | number): Promise<unknown> {
+    return this.http.request({
+      path: `/v1/subscriptions/plans/${encodeURIComponent(planId)}`,
+      bearer: true,
+    });
+  }
+
+  /** Paginated subscription plans. */
+  listSubscriptionPlans(query: Record<string, unknown> = {}): Promise<unknown> {
+    return this.http.request({ path: "/v1/subscriptions/plans", query: { ...query }, bearer: true });
   }
 
   /** Create a customer custody account (partner flow). */
@@ -272,6 +419,83 @@ export class NowPaymentsClient {
   /** Withdraw funds from a customer account to the master account. */
   subPartnerWriteOff(body: Record<string, unknown>): Promise<unknown> {
     return this.http.request({ method: "POST", path: "/v1/sub-partner/write-off", body });
+  }
+
+  /** Create a transfer between customer accounts (POST /v1/sub-partner/transfer). */
+  createSubPartnerTransfer(body: Record<string, unknown>): Promise<unknown> {
+    return this.http.request({ method: "POST", path: "/v1/sub-partner/transfer", body, bearer: true });
+  }
+
+  /** Customer deposit payments (GET /v1/sub-partner/payments). */
+  listSubPartnerPayments(query: Record<string, unknown> = {}): Promise<unknown> {
+    return this.http.request({ path: "/v1/sub-partner/payments", query: { ...query }, bearer: true });
+  }
+
+  // ---------------------------------------------------------------- conversions
+
+  /** Create a custody conversion (POST /v1/conversion, Bearer-protected). */
+  createConversion(input: ConversionInput): Promise<unknown> {
+    return this.http.request({ method: "POST", path: "/v1/conversion", body: input, bearer: true });
+  }
+
+  /** Conversion status (GET /v1/conversion/:conversion_id). */
+  getConversionStatus(conversionId: string | number): Promise<unknown> {
+    return this.http.request({
+      path: `/v1/conversion/${encodeURIComponent(conversionId)}`,
+      bearer: true,
+    });
+  }
+
+  /** Paginated conversions list. */
+  listConversions(query: Record<string, unknown> = {}): Promise<unknown> {
+    return this.http.request({ path: "/v1/conversion", query: { ...query }, bearer: true });
+  }
+
+  // ---------------------------------------------------------------- fiat payouts
+
+  /** Available fiat-payout providers (catalog, API key). */
+  getFiatPayoutProviders(): Promise<unknown> {
+    return this.http.request({ path: "/v1/fiat-payouts/providers" });
+  }
+
+  /** Available fiat currencies (catalog, API key). */
+  getFiatCurrencies(): Promise<unknown> {
+    return this.http.request({ path: "/v1/fiat-payouts/fiat-currencies" });
+  }
+
+  /** Crypto currencies available for fiat payouts. */
+  getFiatCryptoCurrencies(query: Record<string, unknown> = {}): Promise<unknown> {
+    return this.http.request({ path: "/v1/fiat-payouts/crypto-currencies", query: { ...query } });
+  }
+
+  /** Payment methods for fiat payouts. */
+  getFiatPaymentMethods(query: Record<string, unknown> = {}): Promise<unknown> {
+    return this.http.request({ path: "/v1/fiat-payouts/payment-methods", query: { ...query } });
+  }
+
+  /** Create a fiat-payout account (Bearer-protected). */
+  createFiatPayoutAccount(input: FiatPayoutAccountInput): Promise<unknown> {
+    return this.http.request({
+      method: "POST",
+      path: "/v1/fiat-payouts/account",
+      body: input,
+      bearer: true,
+    });
+  }
+
+  /** Paginated fiat-payout accounts (Bearer-protected). */
+  listFiatPayoutAccounts(query: Record<string, unknown> = {}): Promise<unknown> {
+    return this.http.request({ path: "/v1/fiat-payouts/accounts", query: { ...query }, bearer: true });
+  }
+
+  /** Request a fiat payout (POST /v1/fiat-payouts, Bearer-protected). */
+  createFiatPayout(input: FiatPayoutInput): Promise<unknown> {
+    return this.http.request({ method: "POST", path: "/v1/fiat-payouts", body: input, bearer: true });
+  }
+
+  /** Paginated fiat payouts (Bearer-protected). */
+  listFiatPayouts(query: Record<string, unknown> = {}): Promise<unknown> {
+    return this.http.request({ path: "/v1/fiat-payouts", query: { ...query }, bearer: true });
   }
 
   // ------------------------------------------------------------ webhooks

@@ -1,6 +1,7 @@
 export { NowPaymentsClient } from "./client";
 export type { AuthenticateInput } from "./client";
 export { NowPaymentsError, isNowPaymentsError } from "./errors";
+export { getJwtExpiresAtMs, base64UrlDecode } from "./jwt";
 export {
   createWebhookSignature,
   verifyWebhookSignature,
