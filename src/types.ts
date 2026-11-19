@@ -109,8 +109,9 @@ export interface PaymentsList {
 export interface PaymentsListQuery {
   limit?: number;
   page?: number;
-  date_from?: string;
-  date_to?: string;
+  /** The payments list endpoint uses camelCase date params. */
+  dateFrom?: string;
+  dateTo?: string;
   [key: string]: unknown;
 }
 
